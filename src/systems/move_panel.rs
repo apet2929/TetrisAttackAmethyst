@@ -41,7 +41,6 @@ impl<'s> System<'s> for MovePanelSystem {
             let (dx, dy) = {
                 let mut dx = 0.0;
                 let mut dy = 0.0;
-                // println!("{:?}", controller.deref());
                 if controller.is_key_just_pressed(VirtualKeyCode::Left){
                     dx -= PANEL_WIDTH;
                     self.move_timer = TIME_BETWEEN_MOVES;
@@ -58,7 +57,6 @@ impl<'s> System<'s> for MovePanelSystem {
                     dy -= PANEL_HEIGHT;
                     self.move_timer = TIME_BETWEEN_MOVES;
                 }
-
                 (dx, dy)
             };
             local.prepend_translation(Vector3::new(dx, dy, 0.0));

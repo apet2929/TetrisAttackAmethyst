@@ -1,4 +1,6 @@
 use std::borrow::BorrowMut;
+use std::ops::Deref;
+use rand;
 use amethyst::{
     assets::{AssetStorage, Loader, Handle},
     core::transform::Transform,
@@ -11,11 +13,13 @@ use amethyst::core::math::Vector3;
 use amethyst::input::{get_key, is_close_requested, is_key_down, VirtualKeyCode};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use crate::systems::Controller;
-use crate::tetris::PanelType::{Heart, InvertedTriangle, Square, Triangle};
+use crate::tetris::PanelType::{Diamond, Heart, InvertedTriangle, Square, Star, Triangle};
 
 
 pub const PANEL_WIDTH: f32 = (1.0/16.0) * SCREEN_WIDTH as f32;
 pub const PANEL_HEIGHT: f32 = (1.0/16.0) * SCREEN_HEIGHT as f32;
+pub const GRID_WIDTH: usize = 8;
+pub const GRID_HEIGHT: usize = 12;
 
 pub const HEART_PANEL: usize = 0;
 pub const DIAMOND_PANEL: usize = 1;
@@ -26,6 +30,7 @@ pub const INVERTED_TRIANGLE_PANEL: usize = 5;
 pub const P1_CURSOR: usize = 6;
 pub const P1_CURSOR_2: usize = 7;
 
+#[derive(Copy, Clone, PartialEq)]
 pub enum Direction {
     Up,
     Down,
@@ -34,14 +39,18 @@ pub enum Direction {
     None
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PanelType {
     Heart,
+    Diamond,
     Square,
+    Star,
     Triangle,
-    InvertedTriangle
+    InvertedTriangle,
+    None
 }
 
+#[derive(Copy, Clone)]
 pub struct Panel {
     pub kind: PanelType,
     pub flip_direction: Direction,
@@ -50,27 +59,25 @@ pub struct Panel {
 }
 
 impl Panel {
+    fn new(kind: PanelType, x: usize, y: usize) -> Self {
+        Panel {kind, flip_direction: Direction::None, x: x as i32, y: y as i32}
+    }
+
     fn get_texture_id(&self) -> usize {
         match self.kind {
             Heart => HEART_PANEL,
+            Diamond => DIAMOND_PANEL,
             Square => SQUARE_PANEL,
+            Star => STAR_PANEL,
             Triangle => TRIANGLE_PANEL,
             InvertedTriangle => INVERTED_TRIANGLE_PANEL,
-            _ => 999999
+            _ => 99999
         }
     }
 
 }
 
 impl Component for Panel {
-    type Storage = (DenseVecStorage<Self>);
-}
-
-pub struct Grid {
-    grid: Vec<Vec<Panel>>
-}
-
-impl Component for Grid {
     type Storage = (DenseVecStorage<Self>);
 }
 
@@ -93,10 +100,27 @@ impl SimpleState for GameState {
 
         initialise_controller(world);
         initialise_camera(world);
+        initialise_grid(world, sprite_sheet_handle.clone());
         initialise_panel(world, sprite_sheet_handle, panel);
+    }
+}
 
+fn initialise_grid(world: &mut World, sprite_sheet_handle: Handle<SpriteSheet>) {
+    let mut grid = vec![];
+    for y in 0..GRID_HEIGHT {
+        grid.push(vec![]);
+        for x in 0..GRID_WIDTH {
+            let mut panel: Panel = init_random_panel(x, y);
+            initialise_panel(world, sprite_sheet_handle.clone(), panel);
+            grid[y].push(panel);
+        }
     }
 
+    // let g = Grid { grid };
+    // world
+    //     .create_entity()
+    //     .with(g)
+    //     .build();
 }
 
 fn initialise_controller(world: &mut World) {
@@ -117,10 +141,28 @@ fn initialise_panel(world: &mut World, sprite_sheet_handle: Handle<SpriteSheet>,
     transform.set_scale(Vector3::new(scale_x, scale_y, 1.0));
     world
         .create_entity()
-        .with(panel)
+        .with(panel.clone())
         .with(transform)
         .with(sprite_render.clone())
         .build();
+}
+
+fn init_random_panel(x: usize, y: usize) -> Panel {
+    let kind = get_random_panel_type();
+    Panel::new(kind, ((x as f32) * PANEL_WIDTH) as usize, ((y as f32) * PANEL_HEIGHT) as usize)
+}
+
+fn get_random_panel_type() -> PanelType {
+    let id = (rand::random::<f32>() * 6.0) as usize; // 5 panels types, this will constrain the value between 0 and 5
+    match id {
+        0 => Heart,
+        1 => Diamond,
+        2 => Square,
+        3 => Star,
+        4 => Triangle,
+        5 => InvertedTriangle,
+        _ => PanelType::None
+    }
 }
 
 fn initialise_camera(world: &mut World) {
@@ -128,7 +170,6 @@ fn initialise_camera(world: &mut World) {
     let w = SCREEN_WIDTH as f32;
     let h = SCREEN_HEIGHT as f32;
     transform.set_translation_xyz(w * 0.5, h * 0.5, 1.0);
-
 
     world
         .create_entity()
