@@ -10,7 +10,7 @@ use amethyst::{
 };
 use amethyst::core::TransformBundle;
 use amethyst::input::{InputBundle, InputSystem, StringBindings};
-use crate::systems::{ControllerSystem, MovePanelSystem};
+use crate::systems::{ControllerSystem, CursorSystem, MovePanelSystem};
 use crate::tetris::GameState;
 
 mod tetris;
@@ -41,7 +41,9 @@ fn main() -> amethyst::Result<()> {
         )?
         .with_bundle(TransformBundle::new())?
         .with(ControllerSystem, "controller_system", &["input_system"])
+        .with(CursorSystem, "cursor_system", &["controller_system"])
         .with(MovePanelSystem::default(), "move_paddle_system", &["controller_system"]);
+
 
     let assets_dir = app_root.join("assets");
     let mut game = Application::new(assets_dir, GameState, game_data)?;

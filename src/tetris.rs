@@ -1,3 +1,4 @@
+
 use std::borrow::BorrowMut;
 use std::ops::Deref;
 use rand;
@@ -28,8 +29,9 @@ pub const STAR_PANEL: usize = 2;
 pub const SQUARE_PANEL: usize = 3;
 pub const TRIANGLE_PANEL: usize = 4;
 pub const INVERTED_TRIANGLE_PANEL: usize = 5;
-pub const P1_CURSOR: usize = 6;
-pub const P1_CURSOR_2: usize = 7;
+pub const EMPTY_PANEL: usize = 9;
+pub const P1_CURSOR: usize = 7;
+pub const P1_CURSOR_2: usize = 8;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Direction {
@@ -54,15 +56,17 @@ pub enum PanelType {
 #[derive(Copy, Clone)]
 pub struct Panel {
     pub kind: PanelType,
-    pub flip_direction: Direction,
     pub x: i32,
     pub y: i32
-
 }
 
 impl Panel {
     fn new(kind: PanelType, x: usize, y: usize) -> Self {
-        Panel {kind, flip_direction: Direction::None, x: x as i32, y: y as i32}
+        Panel { kind, x: x as i32, y: y as i32 }
+    }
+
+    fn None(x: usize, y: usize) -> Self {
+        Panel { kind: PanelType::None, x: x as i32, y: y as i32 }
     }
 
     fn get_texture_id(&self) -> usize {
@@ -73,7 +77,7 @@ impl Panel {
             Star => STAR_PANEL,
             Triangle => TRIANGLE_PANEL,
             InvertedTriangle => INVERTED_TRIANGLE_PANEL,
-            _ => 99999
+            PanelType::None => EMPTY_PANEL,
         }
     }
 
@@ -91,6 +95,68 @@ impl Component for Panel {
     type Storage = (DenseVecStorage<Self>);
 }
 
+pub struct Grid {
+    pub grid: Vec<Vec<Option<PanelType>>>
+}
+impl Component for Grid {
+    type Storage = (DenseVecStorage<Self>);
+}
+
+impl Default for Grid {
+    fn default() -> Self {
+        let mut g = vec![];
+        for y in 0..GRID_HEIGHT {
+            let mut row = vec![];
+            for x in 0..GRID_WIDTH {
+                row.push(Some(PanelType::None));
+            }
+            g.push(row);
+        }
+        Grid { grid: g }
+    }
+}
+
+impl Grid {
+    pub fn set(&mut self, x: usize, y: usize, pt: Option<PanelType>) {
+        assert!(x < GRID_WIDTH && y < GRID_HEIGHT);
+        self.grid[y][x] = pt;
+    }
+
+    pub fn get(self, x: usize, y: usize) -> Option<PanelType> {
+        if x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT {
+            return None
+        }
+        self.grid[y][x]
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum Side {
+    Left,
+    Right,
+}
+
+pub struct Cursor {
+    pub x: usize,
+    pub y: usize,
+    pub side: Side
+}
+impl Component for Cursor {
+    type Storage = (DenseVecStorage<Self>);
+}
+
+impl Cursor {
+    pub fn translate(&mut self, x: i32, y: i32) {
+        let nx = (self.x as i32) + x;
+        let ny = (self.y as i32) + y;
+        if nx < 0 || (nx as usize) >= GRID_WIDTH || ny < 0 || (ny as usize) >= GRID_HEIGHT {
+
+        } else {
+            self.x = nx as usize;
+            self.y = ny as usize;
+        }
+    }
+}
 
 pub struct GameState;
 
@@ -101,17 +167,11 @@ impl SimpleState for GameState {
 
         let sprite_sheet_handle = load_sprite_sheet(world);
 
-        let panel = Panel {
-            kind: Heart,
-            flip_direction: Direction::None,
-            x: SCREEN_WIDTH/2,
-            y: SCREEN_HEIGHT/2,
-        };
-
+        world.insert(Grid::default());
         initialise_controller(world);
         initialise_camera(world);
         initialise_grid(world, sprite_sheet_handle.clone());
-        initialise_panel(world, sprite_sheet_handle, panel);
+        initialise_cursor(world, sprite_sheet_handle.clone());
     }
 
     fn update(&mut self, _data: &mut StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
@@ -141,6 +201,29 @@ fn initialise_grid(world: &mut World, sprite_sheet_handle: Handle<SpriteSheet>) 
     //     .build();
 }
 
+fn initialise_cursor(world: &mut World, sprite_sheet_handle: Handle<SpriteSheet>) {
+    let leftCursor = Cursor { side: Side::Left, x: 0, y: 0 };
+    let rightCursor = Cursor { side: Side::Right, x: 0, y: 0 };
+    let sprite = SpriteRender::new(sprite_sheet_handle.clone(), P1_CURSOR);
+    let sprite_2 = SpriteRender::new(sprite_sheet_handle, P1_CURSOR);
+    let mut transform = Transform::default();
+    transform.set_translation_xyz(0.0,0.0,0.1);
+    let mut t2 = transform.clone();
+    t2.set_translation_xyz(PANEL_WIDTH, 0.0, 0.1);
+
+    world.create_entity()
+        .with(leftCursor)
+        .with(sprite)
+        .with(transform)
+        .build();
+
+    world.create_entity()
+        .with(rightCursor)
+        .with(sprite_2)
+        .with(t2)
+        .build();
+}
+
 fn initialise_controller(world: &mut World) {
     let controller = Controller::default();
     world
@@ -153,7 +236,7 @@ fn initialise_panel(world: &mut World, sprite_sheet_handle: Handle<SpriteSheet>,
     let mut transform = Transform::default();
 
     let mut sprite_render = SpriteRender::new(sprite_sheet_handle, panel.get_texture_id());
-    sprite_render.sprite_number = TRIANGLE_PANEL;
+
     transform.set_translation_xyz(panel.get_pixel_x(), panel.get_pixel_y(), 0.0);
     let scale_x = PANEL_WIDTH / 16.0;
     let scale_y = PANEL_HEIGHT / 16.0;
@@ -172,7 +255,7 @@ fn init_random_panel(x: usize, y: usize) -> Panel {
 }
 
 fn get_random_panel_type() -> PanelType {
-    let id = (rand::random::<f32>() * 6.0) as usize; // 5 panels types, this will constrain the value between 0 and 5
+    let id = (rand::random::<f32>() * 7.0) as usize; // 6 panels types (including none), this will constrain the value between 0 and 6
     match id {
         0 => Heart,
         1 => Diamond,
@@ -188,7 +271,7 @@ fn initialise_camera(world: &mut World) {
     let mut transform = Transform::default();
     let w = SCREEN_WIDTH as f32;
     let h = SCREEN_HEIGHT as f32;
-    transform.set_translation_xyz(w * 0.5, h * 0.5, 1.0);
+    transform.set_translation_xyz(w * 0.23,h * 0.37, 1.0);
 
     world
         .create_entity()
@@ -202,7 +285,7 @@ fn load_sprite_sheet(world: &mut World) -> Handle<SpriteSheet> {
         let loader = world.read_resource::<Loader>();
         let texture_storage = world.read_resource::<AssetStorage<Texture>>();
         loader.load(
-            "sprites/sprites.png",
+            "sprites/new_sprites.png",
             ImageFormat::default(),
             (),
             &texture_storage,
