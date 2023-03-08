@@ -10,6 +10,7 @@ use amethyst::{
     renderer::{Camera, ImageFormat, SpriteRender, SpriteSheet, SpriteSheetFormat, Texture},
 };
 use amethyst::core::math::Vector3;
+use amethyst::ecs::world::Index;
 use amethyst::input::{get_key, is_close_requested, is_key_down, VirtualKeyCode};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use crate::systems::Controller;
@@ -56,6 +57,7 @@ pub struct Panel {
     pub flip_direction: Direction,
     pub x: i32,
     pub y: i32
+
 }
 
 impl Panel {
@@ -73,6 +75,14 @@ impl Panel {
             InvertedTriangle => INVERTED_TRIANGLE_PANEL,
             _ => 99999
         }
+    }
+
+    fn get_pixel_x(&self) -> f32 {
+        (self.x as f32) * PANEL_WIDTH
+    }
+
+    fn get_pixel_y(&self) -> f32 {
+        (self.y as f32) * PANEL_HEIGHT
     }
 
 }
@@ -103,6 +113,14 @@ impl SimpleState for GameState {
         initialise_grid(world, sprite_sheet_handle.clone());
         initialise_panel(world, sprite_sheet_handle, panel);
     }
+
+    fn update(&mut self, _data: &mut StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
+        SimpleTrans::None
+    }
+}
+
+fn get_panel_index(x: usize, y: usize) -> usize {
+    y * GRID_WIDTH + x
 }
 
 fn initialise_grid(world: &mut World, sprite_sheet_handle: Handle<SpriteSheet>) {
@@ -134,8 +152,9 @@ fn initialise_controller(world: &mut World) {
 fn initialise_panel(world: &mut World, sprite_sheet_handle: Handle<SpriteSheet>, panel: Panel) {
     let mut transform = Transform::default();
 
-    let sprite_render = SpriteRender::new(sprite_sheet_handle, panel.get_texture_id());
-    transform.set_translation_xyz(panel.x as f32, panel.y as f32, 0.0);
+    let mut sprite_render = SpriteRender::new(sprite_sheet_handle, panel.get_texture_id());
+    sprite_render.sprite_number = TRIANGLE_PANEL;
+    transform.set_translation_xyz(panel.get_pixel_x(), panel.get_pixel_y(), 0.0);
     let scale_x = PANEL_WIDTH / 16.0;
     let scale_y = PANEL_HEIGHT / 16.0;
     transform.set_scale(Vector3::new(scale_x, scale_y, 1.0));
@@ -149,7 +168,7 @@ fn initialise_panel(world: &mut World, sprite_sheet_handle: Handle<SpriteSheet>,
 
 fn init_random_panel(x: usize, y: usize) -> Panel {
     let kind = get_random_panel_type();
-    Panel::new(kind, ((x as f32) * PANEL_WIDTH) as usize, ((y as f32) * PANEL_HEIGHT) as usize)
+    Panel::new(kind, x, y)
 }
 
 fn get_random_panel_type() -> PanelType {
